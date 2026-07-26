@@ -8,39 +8,40 @@ const path = require("path");
 const { promisify } = require('util');
 const exec = promisify(require('child_process').exec);
 
-// ========================================================
-// PARSING VARIABEL VIA ENV (MURNI UNIVERSAL & BERSIH)
-// ========================================================
+// Alamat unggah otomatis untuk node atau langganan (isi dengan beranda proyek Merge-sub setelah diterapkan, contoh: https://merge.xxx.com)
 const UPLOAD_URL = process.env.UPLOAD_URL || '';      
+// Isi URL proyek jika perlu mengunggah langganan atau menjaga agar proyek tetap aktif, contoh: https://google.com
 const PROJECT_URL = process.env.PROJECT_URL || '';    
+// false mematikan fitur jaga aktif otomatis, true mengaktifkan (wajib mengisi variabel PROJECT_URL bersamaan)
 const AUTO_ACCESS = process.env.AUTO_ACCESS || false; 
+// Direktori operasi, tempat berkas sub node disimpan
 const FILE_PATH = process.env.FILE_PATH || '.tmp';   
+// Jalur langganan
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
+// Port layanan HTTP untuk langganan
 const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;        
-
-// 1. UUID UNIVERSAL
-const UUID = process.env.UUID || '853b8456-0c0b-4bfa-b3b4-b2619248a9bc'; 
-
-// 2. ARGO ENVIRONMENT MANUAL (Wajib diisi via Env di Railway/VPS lu)
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || '';          
-const ARGO_AUTH = process.env.ARGO_AUTH || '';              
-
-const ARGO_PORT = process.env.ARGO_PORT || 8001;            
-const CFIP = process.env.CFIP || 'api.quipper.com';          
-const CFPORT = process.env.CFPORT || 443;                   
-const NAME = process.env.NAME || 'ddfathu';                 
-
-// 3. PATH WEBSOCKET UNIVERSAL
-const VLESS_PATH = process.env.VLESS_PATH || '/vless-argo';
-const VMESS_PATH = process.env.VMESS_PATH || '/vmess-argo';
-const TROJAN_PATH = process.env.TROJAN_PATH || '/trojan-argo';
-
-// NEZHA CONFIG (MONITORING AGENT)
+// Menggunakan Nezha v1, jika dijalankan di berbagai platform berbeda perlu mengubah UUID agar tidak tertimpa
+const UUID = process.env.UUID || 'a68f2297-ba40-40f0-b49c-a42292681df4'; 
+// Format pengisian Nezha v1: nz.abc.com:8008 | Format pengisian Nezha v0: nz.abc.com
 const NEZHA_SERVER = process.env.NEZHA_SERVER || '';        
+// Jika menggunakan Nezha v1 biarkan kosong, Nezha v0 wajib diisi
 const NEZHA_PORT = process.env.NEZHA_PORT || '';            
+// NZ_CLIENT_SECRET untuk Nezha v1 atau kunci agen untuk Nezha v0
 const NEZHA_KEY = process.env.NEZHA_KEY || '';              
+// Domain terowongan tetap, biarkan kosong jika ingin menggunakan terowongan sementara (Quick Tunnel)
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || 'udpvles2.dfathu.web.id';          
+// JSON atau token terowongan tetap, biarkan kosong untuk terowongan sementara. Dapatkan JSON di: https://json.zone.id
+const ARGO_AUTH = process.env.ARGO_AUTH || 'eyJhIjoiZGUzYjk5YjY1ZjcyZDBiM2JkZTgxODUzMDI1OTM1ZjAiLCJ0IjoiMWMwMjcwZjAtZDBiYy00YmJmLWI3ODktNzhkYWEzYWNkMDNhIiwicyI6Ik1EUmxZemsyT1RVdFpqTmpZUzAwTW1JNUxUbG1NVEF0TURNM04yTXhPV1JpTnpkaiJ9';              
+// Port terowongan tetap, jika menggunakan token pastikan pengaturannya di dasbor cloudflare sama dengan di sini
+const ARGO_PORT = process.env.ARGO_PORT || 8001;            
+// Domain atau IP tujuan pilihan untuk node
+const CFIP = process.env.CFIP || '104.17.3.81';            
+// Port yang sesuai untuk domain atau IP tujuan pilihan node
+const CFPORT = process.env.CFPORT || 443;                   
+// Nama Node
+const NAME = process.env.NAME || 'ata';                        
 
-// Membuat Folder Operasional
+// Membuat folder operasi jika belum ada
 if (!fs.existsSync(FILE_PATH)) {
   fs.mkdirSync(FILE_PATH);
   console.log(`${FILE_PATH} is created`);
@@ -48,7 +49,7 @@ if (!fs.existsSync(FILE_PATH)) {
   console.log(`${FILE_PATH} already exists`);
 }
 
-// Generate Nama Acak 6 Karakter (Penyamaran Proses)
+// Menghasilkan nama acak 6 karakter untuk penyamaran proses
 function generateRandomName() {
   const characters = 'abcdefghijklmnopqrstuvwxyz';
   let result = '';
@@ -58,7 +59,7 @@ function generateRandomName() {
   return result;
 }
 
-// Konstanta Jalur Internal
+// Konstanta Global
 let subContent = null;
 const npmName = generateRandomName();
 const webName = generateRandomName();
@@ -73,7 +74,7 @@ let listPath = path.join(FILE_PATH, 'list.txt');
 let bootLogPath = path.join(FILE_PATH, 'boot.log');
 let configPath = path.join(FILE_PATH, 'config.json');
 
-// Menghapus Node Lama di Subscriptions Server Jika Ada
+// Menghapus node lama pada server langganan remote jika ada riwayat operasi sebelumnya
 function deleteNodes() {
   try {
     if (!UPLOAD_URL) return;
@@ -105,7 +106,7 @@ function deleteNodes() {
   }
 }
 
-// Pembersihan Sisa File Lama
+// Membersihkan berkas riwayat lama di direktori kerja
 function cleanupOldFiles() {
   try {
     const files = fs.readdirSync(FILE_PATH);
@@ -117,64 +118,24 @@ function cleanupOldFiles() {
           fs.unlinkSync(filePath);
         }
       } catch (err) {
-        // Abaikan eror log disk
+        // Mengabaikan semua galat tanpa mencatat log
       }
     });
   } catch (err) {
-    // Abaikan eror log disk
+    // Mengabaikan semua galat tanpa mencatat log
   }
 }
 
-// =================================================================
-// GENERATE XRAY CONFIG (FIX ARGO 502 - PORT TUNGGAL INTERNAL 8080)
-// =================================================================
+// Membuat berkas konfigurasi xray
 async function generateConfig() {
   const config = {
     log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' },
     inbounds: [
-      // 1. PINTU MASUK UTAMA ARGO (Murni HTTP TCP Balancer - Anti 502)
-      { 
-        port: ARGO_PORT, 
-        listen: "127.0.0.1",
-        protocol: 'vless', 
-        settings: { 
-          clients: [{ id: UUID }], 
-          decryption: 'none', 
-          // Meneruskan trafik HTTP murni dari Argo ke port internal WS 8080
-          fallbacks: [{ dest: 8080 }] 
-        }, 
-        streamSettings: { network: 'tcp' } 
-      },
-      // 2. PORT TUNGGAL INTERNAL 8080 (VLESS, VMESS, TROJAN DISATUKAN)
-      {
-        port: 8080,
-        listen: "127.0.0.1",
-        protocol: "vless",
-        settings: {
-          clients: [
-            { id: UUID, level: 0 }
-          ],
-          decryption: "none",
-          // Meneruskan jenis VPN secara pintar berdasarkan path yang diminta HP lu
-          fallbacks: [
-            { path: VMESS_PATH, dest: 8080 },
-            { path: TROJAN_PATH, dest: 8080 }
-          ]
-        },
-        streamSettings: {
-          network: "ws",
-          security: "none",
-          wsSettings: { 
-            path: VLESS_PATH 
-          }
-        },
-        // SNIFFING UDP UNTUK MEMASTIKAN BYPASS GAME & VOIP TETAP IJO ROYOROYO
-        sniffing: { 
-          enabled: true, 
-          destOverride: ["http", "tls", "quic"], 
-          metadataOnly: false 
-        }
-      }
+      { port: ARGO_PORT, protocol: 'vless', settings: { clients: [{ id: UUID, flow: 'xtls-rprx-vision' }], decryption: 'none', fallbacks: [{ dest: 3001 }, { path: "/vless-argo", dest: 3002 }, { path: "/vmess-argo", dest: 3003 }, { path: "/trojan-argo", dest: 3004 }] }, streamSettings: { network: 'tcp' } },
+      { port: 3001, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID }], decryption: "none" }, streamSettings: { network: "tcp", security: "none" } },
+      { port: 3002, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "ws", security: "none", wsSettings: { path: "/vless-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
+      { port: 3003, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", wsSettings: { path: "/vmess-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
+      { port: 3004, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: "/trojan-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
     ],
     dns: { servers: ["https+local://8.8.8.8/dns-query"] },
     outbounds: [{ protocol: "freedom", tag: "direct" }, { protocol: "blackhole", tag: "block" }]
@@ -182,7 +143,7 @@ async function generateConfig() {
   fs.writeFileSync(path.join(FILE_PATH, 'config.json'), JSON.stringify(config, null, 2));
 }
 
-// Deteksi Arsitektur Mesin Server (ARM vs AMD)
+// Mendeteksi arsitektur sistem operasi (ARM vs AMD)
 function getSystemArchitecture() {
   const arch = os.arch();
   if (arch === 'arm' || arch === 'arm64' || arch === 'aarch64') {
@@ -192,7 +153,7 @@ function getSystemArchitecture() {
   }
 }
 
-// Unduh Core Dependency Binary
+// Mengunduh berkas dependensi sesuai arsitektur sistem
 function downloadFile(fileName, fileUrl, callback) {
   const filePath = fileName;
 
@@ -230,7 +191,7 @@ function downloadFile(fileName, fileUrl, callback) {
     });
 }
 
-// Pemasangan & Eksekusi Background Service Engine
+// Mengunduh berkas dependensi dan menjalankannya
 async function downloadFilesAndRun() {
   const architecture = getSystemArchitecture();
   const filesToDownload = getFilesForArchitecture(architecture);
@@ -259,6 +220,7 @@ async function downloadFilesAndRun() {
     return;
   }
 
+  // Memberikan izin eksekusi berkas binary (chmod 775)
   function authorizeFiles(filePaths) {
     const newPermissions = 0o775;
     filePaths.forEach(absoluteFilePath => {
@@ -276,7 +238,7 @@ async function downloadFilesAndRun() {
   const filesToAuthorize = NEZHA_PORT ? [npmPath, webPath, botPath] : [phpPath, webPath, botPath];
   authorizeFiles(filesToAuthorize);
 
-  // Jalankan Nezha Agent (Jika Diisi)
+  // Menjalankan Nezha Agen Monitor
   if (NEZHA_SERVER && NEZHA_KEY) {
     if (!NEZHA_PORT) {
       const port = NEZHA_SERVER.includes(':') ? NEZHA_SERVER.split(':').pop() : '';
@@ -329,10 +291,10 @@ uuid: ${UUID}`;
       }
     }
   } else {
-    console.log('NEZHA variable is empty, skip running');
+    console.log('NEZHA variable is empty,skip running');
   }
 
-  // Jalankan Core Xray
+  // Menjalankan core xray backend
   const command1 = `nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`;
   try {
     await exec(command1);
@@ -342,7 +304,7 @@ uuid: ${UUID}`;
     console.error(`web running error: ${error}`);
   }
 
-  // Jalankan Cloudflared Argo
+  // Menjalankan daemon cloudflared argo tunnel
   if (fs.existsSync(botPath)) {
     let args;
 
@@ -365,7 +327,7 @@ uuid: ${UUID}`;
   await new Promise((resolve) => setTimeout(resolve, 5000));
 }
 
-// Pengambilan URL Binary Terpercaya Berdasarkan Jenis OS Server
+// Mengembalikan URL berkas berdasarkan arsitektur sistem
 function getFilesForArchitecture(architecture) {
   let baseFiles;
   if (architecture === 'arm') {
@@ -403,7 +365,7 @@ function getFilesForArchitecture(architecture) {
   return baseFiles;
 }
 
-// Validasi & Setting Konfigurasi Tunnel Tetap
+// Memproses konfigurasi berkas JSON terowongan tetap
 function argoType() {
   if (!ARGO_AUTH || !ARGO_DOMAIN) {
     console.log("ARGO_DOMAIN or ARGO_AUTH is empty, use quick tunnels");
@@ -430,7 +392,7 @@ function argoType() {
   }
 }
 
-// Ekstrasi Alamat Domain Terowongan Argo
+// Mengekstrak alamat domain dari terowongan sementara
 async function extractDomains() {
   let argoDomain;
 
@@ -466,7 +428,7 @@ async function extractDomains() {
               await exec(`pkill -f "[${botName.charAt(0)}]${botName.substring(1)}" > /dev/null 2>&1`);
             }
           } catch (error) {
-            // Passthrough
+            // Mengabaikan keluaran
           }
         }
         killBotProcess();
@@ -487,7 +449,7 @@ async function extractDomains() {
   }
 }
 
-// Pengambilan Meta ISP Geolocation Data
+// Mendapatkan informasi metadata penyedia internet (ISP) lokal server
 async function getMetaInfo() {
   try {
     const response1 = await axios.get('https://api.ip.sb/geoip', { headers: { 'User-Agent': 'Mozilla/5.0', timeout: 3000 } });
@@ -501,34 +463,30 @@ async function getMetaInfo() {
         return `${response2.data.countryCode}-${response2.data.org}`.replace(/\s+/g, '_');
       }
     } catch (error) {
-      // Passthrough
+      // Mengabaikan kegagalan API cadangan
     }
   }
   return 'Unknown';
 }
 
-// Pembuatan Data Output Subscription Link VLESS/VMESS/Trojan
+// Membuat tautan mentah untuk daftar list node dan langganan (sub)
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo();
   const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
-  
-  const vlessPathEncoded = encodeURIComponent(VLESS_PATH + '?ed=2560');
-  const vmessPathEncoded = VMESS_PATH + '?ed=2560';
-  const trojanPathEncoded = encodeURIComponent(TROJAN_PATH + '?ed=2560');
-
   return new Promise((resolve) => {
     setTimeout(() => {
-      const VMESS = { v: '2', ps: `${nodeName}`, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: vmessPathEncoded, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+      const VMESS = { v: '2', ps: `${nodeName}`, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: '/vmess-argo?ed=2560', tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
       const subTxt = `
-vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEncoded}#${nodeName}
+vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${encodeURIComponent('/vless-argo?ed=2560')}#${nodeName}
 
 vmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}
 
-trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEncoded}#${nodeName}
+trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${encodeURIComponent('/trojan-argo?ed=2560')}#${nodeName}
     `;
       console.log(Buffer.from(subTxt).toString('base64'));
       fs.writeFileSync(subPath, Buffer.from(subTxt).toString('base64'));
       console.log(`${FILE_PATH}/sub.txt saved successfully`);
+      // Menyimpan konten langganan ke variabel global untuk digunakan oleh server HTTP
       subContent = Buffer.from(subTxt).toString('base64');
       uploadNodes();
       resolve(subTxt);
@@ -536,7 +494,7 @@ trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&typ
   });
 }
 
-// Otomatisasi Setor Subscriptions ke Merge-Sub Jarak Jauh
+// Unggah node atau langganan secara otomatis ke server remote
 async function uploadNodes() {
   if (UPLOAD_URL && PROJECT_URL) {
     const subscriptionUrl = `${PROJECT_URL}/${SUB_PATH}`;
@@ -559,7 +517,7 @@ async function uploadNodes() {
     } catch (error) {
       if (error.response) {
         if (error.response.status === 400) {
-          // Passthrough
+          // Mengabaikan jika langganan sudah ada
         }
       }
     }
@@ -586,11 +544,12 @@ async function uploadNodes() {
       return null;
     }
   } else {
+    // Mengabaikan proses unggah node
     return;
   }
 }
 
-// RAHASIA UTAMA SILUMAN: Hapus Jejak File Binary dari Disk setelah 90 Detik
+// Fitur anti-forensik: Menghapus berkas terkait dari penyimpanan disk setelah 90 detik operasional
 function cleanFiles() {
   setTimeout(() => {
     const filesToDelete = [bootLogPath, configPath, webPath, botPath];
@@ -618,7 +577,7 @@ function cleanFiles() {
 }
 cleanFiles();
 
-// Automatisasi Ping Keep-Alive Serv00
+// Mengirimkan tugas kunjungan otomatis ke tautan proyek (Keep Alive Serv00)
 async function AddVisitTask() {
   if (!AUTO_ACCESS || !PROJECT_URL) {
     console.log("Skipping adding automatic access task");
@@ -636,12 +595,12 @@ async function AddVisitTask() {
     console.log(`automatic access task added successfully`);
     return response;
   } catch (error) {
-    console.error(`Add automatic access task failed: ${error.message}`);
+    console.error(`Add automatic access task faild: ${error.message}`);
     return null;
   }
 }
 
-// Alur Boot Utama
+// Logika alur eksekusi utama saat boot server
 async function startserver() {
   try {
     argoType();
@@ -659,16 +618,17 @@ startserver().catch(error => {
   console.error('Unhandled error in startserver:', error);
 });
 
-// Pembuatan Web Server HTTP Frontfacing
+// Membuat antarmuka Server HTTP lokal untuk web
 const server = http.createServer(async (req, res) => {
   const urlPath = req.url.split('?')[0];
 
-  // Router Download Link Akun VPN
+  // Jalur Rute Langganan Akun VPN
   if (urlPath === `/${SUB_PATH}`) {
     if (subContent) {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(subContent);
     } else {
+      // Jika konten langganan belum dibuat di RAM, coba baca dari berkas disk cadangan
       try {
         const fileContent = fs.readFileSync(subPath, 'utf-8');
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -681,7 +641,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Router Kamuflase Browser Biasa (Aman & Formalitas)
+  // Rute Utama: / (Penyamaran Browser Biasa)
   if (urlPath === '/') {
     try {
       const filePath = path.join(__dirname, 'index.html');
