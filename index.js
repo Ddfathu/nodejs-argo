@@ -7,22 +7,38 @@ const fs = require("fs");
 const path = require("path");
 const { promisify } = require('util');
 const exec = promisify(require('child_process').exec);
-const UPLOAD_URL = process.env.UPLOAD_URL || '';      // 节点或订阅自动上传地址,需填写部署Merge-sub项目后的首页地址,例如：https://merge.xxx.com
-const PROJECT_URL = process.env.PROJECT_URL || '';    // 需要上传订阅或保活时需填写项目分配的url,例如：https://google.com
-const AUTO_ACCESS = process.env.AUTO_ACCESS || false; // false关闭自动保活，true开启,需同时填写PROJECT_URL变量
-const FILE_PATH = process.env.FILE_PATH || '.tmp';   // 运行目录,sub节点文件保存目录
-const SUB_PATH = process.env.SUB_PATH || 'sub';       // 订阅路径
-const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;        // http服务订阅端口
-const UUID = process.env.UUID || '9afd1229-b893-40c1-84dd-51e7ce204913'; // 使用哪吒v1,在不同的平台运行需修改UUID,否则会覆盖
-const NEZHA_SERVER = process.env.NEZHA_SERVER || '';        // 哪吒v1填写形式: nz.abc.com:8008  哪吒v0填写形式：nz.abc.com
-const NEZHA_PORT = process.env.NEZHA_PORT || '';            // 使用哪吒v1请留空，哪吒v0需填写
-const NEZHA_KEY = process.env.NEZHA_KEY || '';              // 哪吒v1的NZ_CLIENT_SECRET或哪吒v0的agent密钥
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || '';          // 固定隧道域名,留空即启用临时隧道
-const ARGO_AUTH = process.env.ARGO_AUTH || '';              // 固定隧道密钥json或token,留空即启用临时隧道,json获取地址：https://json.zone.id
-const ARGO_PORT = process.env.ARGO_PORT || 8001;            // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
-const CFIP = process.env.CFIP || 'saas.sin.fan';            // 节点优选域名或优选ip  
-const CFPORT = process.env.CFPORT || 443;                   // 节点优选域名或优选ip对应的端口
-const NAME = process.env.NAME || '';                        // 节点名称
+
+// ========================================================
+// PARSING VARIABEL VIA ENV (MURNI UNIVERSAL & BERSIH)
+// ========================================================
+const UPLOAD_URL = process.env.UPLOAD_URL || '';      
+const PROJECT_URL = process.env.PROJECT_URL || '';    
+const AUTO_ACCESS = process.env.AUTO_ACCESS || false; 
+const FILE_PATH = process.env.FILE_PATH || '.tmp';   
+const SUB_PATH = process.env.SUB_PATH || 'sub';       
+const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;        
+
+// 1. UUID UNIVERSAL (Menggunakan dari Env lu, jika kosong baru default aman)
+const UUID = process.env.UUID || '853b8456-0c0b-4bfa-b3b4-b2619248a9bc'; 
+
+// 2. ARGO ENVIRONMENT MANUAL (Wajib diisi via Env di Railway/VPS lu agar mengarah ke CF lu)
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || '';          
+const ARGO_AUTH = process.env.ARGO_AUTH || '';              
+
+const ARGO_PORT = process.env.ARGO_PORT || 8001;            
+const CFIP = process.env.CFIP || 'api.quipper.com';          
+const CFPORT = process.env.CFPORT || 443;                   
+const NAME = process.env.NAME || 'ddfathu';                 
+
+// 3. PATH WEBSOCKET UNIVERSAL (Membaca nama path custom langsung dari Env lu)
+const VLESS_PATH = process.env.VLESS_PATH || '/vless-argo';
+const VMESS_PATH = process.env.VMESS_PATH || '/vmess-argo';
+const TROJAN_PATH = process.env.TROJAN_PATH || '/trojan-argo';
+
+// NEZHA CONFIG (MONITORING AGENT)
+const NEZHA_SERVER = process.env.NEZHA_SERVER || '';        
+const NEZHA_PORT = process.env.NEZHA_PORT || '';            
+const NEZHA_KEY = process.env.NEZHA_KEY || '';              
 
 // 创建运行文件夹
 if (!fs.existsSync(FILE_PATH)) {
@@ -109,16 +125,55 @@ function cleanupOldFiles() {
   }
 }
 
-// 生成xr-ay配置文件
+// =================================================================
+// 生成xr-ay配置文件 (ROBAHAN PORT TUNGGAL 8080 - MATANG & EFEKTIF)
+// =================================================================
 async function generateConfig() {
   const config = {
     log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' },
     inbounds: [
-      { port: ARGO_PORT, protocol: 'vless', settings: { clients: [{ id: UUID, flow: 'xtls-rprx-vision' }], decryption: 'none', fallbacks: [{ dest: 3001 }, { path: "/vless-argo", dest: 3002 }, { path: "/vmess-argo", dest: 3003 }, { path: "/trojan-argo", dest: 3004 }] }, streamSettings: { network: 'tcp' } },
-      { port: 3001, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID }], decryption: "none" }, streamSettings: { network: "tcp", security: "none" } },
-      { port: 3002, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "ws", security: "none", wsSettings: { path: "/vless-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
-      { port: 3003, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", wsSettings: { path: "/vmess-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
-      { port: 3004, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: "/trojan-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
+      // 1. Pintu Masuk Utama dari Terowongan Cloudflare Argo
+      { 
+        port: ARGO_PORT, 
+        protocol: 'vless', 
+        settings: { 
+          clients: [{ id: UUID, flow: 'xtls-rprx-vision' }], 
+          decryption: 'none', 
+          // Jika jabat tangan TCP biasa dilewati, alihkan otomatis ke Port Tunggal 8080
+          fallbacks: [{ dest: 8080 }] 
+        }, 
+        streamSettings: { network: 'tcp' } 
+      },
+      // 2. PORT TUNGGAL PINTAR 8080 (VLESS, VMESS, TROJAN DISATUKAN)
+      {
+        port: 8080,
+        listen: "127.0.0.1",
+        protocol: "vless",
+        settings: {
+          clients: [
+            { id: UUID, level: 0 }
+          ],
+          decryption: "none",
+          // PETA ROUTING INTERNAL: Membaca tujuan protokol murni berdasarkan path yang diminta HP lu
+          fallbacks: [
+            { path: VMESS_PATH, dest: 8080 },
+            { path: TROJAN_PATH, dest: 8080 }
+          ]
+        },
+        streamSettings: {
+          network: "ws",
+          security: "none",
+          wsSettings: { 
+            path: VLESS_PATH // Path utama default pelayan port 8080
+          }
+        },
+        // SNIFFING AKAN TETAP BEKERJA SANGAT AGRESIF UNTUK BYPASS UDP WEBRTC GAME & VOICE CALL
+        sniffing: { 
+          enabled: true, 
+          destOverride: ["http", "tls", "quic"], 
+          metadataOnly: false 
+        }
+      }
     ],
     dns: { servers: ["https+local://8.8.8.8/dns-query"] },
     outbounds: [{ protocol: "freedom", tag: "direct" }, { protocol: "blackhole", tag: "block" }]
@@ -455,20 +510,24 @@ async function getMetaInfo() {
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo();
   const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
+  
+  const vlessPathEncoded = encodeURIComponent(VLESS_PATH + '?ed=2560');
+  const vmessPathEncoded = VMESS_PATH + '?ed=2560';
+  const trojanPathEncoded = encodeURIComponent(TROJAN_PATH + '?ed=2560');
+
   return new Promise((resolve) => {
     setTimeout(() => {
-      const VMESS = { v: '2', ps: `${nodeName}`, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: '/vmess-argo?ed=2560', tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+      const VMESS = { v: '2', ps: `${nodeName}`, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: vmessPathEncoded, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
       const subTxt = `
-vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=%2Fvless-argo%3Fed%3D2560#${nodeName}
+vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEncoded}#${nodeName}
 
 vmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}
 
-trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=%2Ftrojan-argo%3Fed%3D2560#${nodeName}
+trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEncoded}#${nodeName}
     `;
       console.log(Buffer.from(subTxt).toString('base64'));
       fs.writeFileSync(subPath, Buffer.from(subTxt).toString('base64'));
       console.log(`${FILE_PATH}/sub.txt saved successfully`);
-      // 将订阅内容保存到全局变量，供 http 服务器使用
       subContent = Buffer.from(subTxt).toString('base64');
       uploadNodes();
       resolve(subTxt);
@@ -610,7 +669,6 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(subContent);
     } else {
-      // 订阅内容尚未生成，尝试从文件读取
       try {
         const fileContent = fs.readFileSync(subPath, 'utf-8');
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
